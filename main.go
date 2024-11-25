@@ -31,15 +31,17 @@ func main() {
 			return
 		}
 		// Add the current branch to the filter list
-		currentBranch, err := getCurrentBranch()
+		branches, currentBranch, err := getLocalBranches()
 		if err != nil {
-			fmt.Println("Error retrieving current branch:", err)
-			return
+			fmt.Printf("Error: %v\n", err)
+			os.Exit(1)
 		}
-		filterBranches = append(filterBranches, currentBranch)
-		if len(args) == 2 && args[1] == "--dry-run" {
-			dryRun = true
-		}
+		filterBranches = []string{currentBranch}
+		fmt.Printf("Current branch: %s\n", currentBranch)
+
+		branchesToDelete := branchcleaner.FilterBranches(branches, filterBranches)
+		fmt.Println("Branches to delete:")
+		deleteBranches(branchesToDelete, dryRun)
 	} else {
 		// Parse remaining arguments
 		for i, arg := range args {
@@ -66,7 +68,7 @@ func main() {
 	}
 
 	// List all local branches
-	branches, err := getLocalBranches()
+	branches, currentBranch, err := getLocalBranches()
 	if err != nil {
 		fmt.Println("Error retrieving local branches:", err)
 		return
@@ -74,6 +76,11 @@ func main() {
 
 	// Filter branches based on the provided args and filter list
 	filteredBranches := branchcleaner.FilterBranches(branches, filterBranches)
+
+	if branchesContains(filteredBranches, currentBranch) {
+		fmt.Print("Deleting the current branch is not supported. Change to a different branch.")
+		return
+	}
 
 	// Print initial dry-run message
 	if dryRun {
@@ -84,48 +91,49 @@ func main() {
 	err = deleteBranches(filteredBranches, dryRun)
 	if err != nil {
 		fmt.Println("Error deleting branches:", err)
-	} else if !dryRun {
-		fmt.Println("Branches deleted:", strings.Join(filteredBranches, ", "))
 	}
 }
 
-// Get all local branches
-func getLocalBranches() ([]string, error) {
-	cmd := exec.Command("git", "branch", "--list")
-	output, err := cmd.Output()
-	if err != nil {
-		return nil, err
-	}
-
-	// Split the output into individual branches
-	branches := strings.Split(string(output), "\n")
-	var result []string
-	for _, branch := range branches {
-		branch = strings.TrimSpace(branch)
-		if branch != "" {
-			result = append(result, branch)
+func branchesContains(branches []string, test string) bool {
+	for _, b := range branches {
+		if b == test {
+			return true
 		}
 	}
-	return result, nil
+	return false
 }
 
-// Get the current branch
-func getCurrentBranch() (string, error) {
-	cmd := exec.Command("git", "branch", "--show-current")
+func getLocalBranches() ([]string, string, error) {
+	cmd := exec.Command("git", "branch")
 	output, err := cmd.Output()
 	if err != nil {
-		return "", err
+		return nil, "", fmt.Errorf("failed to get branches: %v", err)
 	}
-	return strings.TrimSpace(string(output)), nil
+
+	var branches []string
+	var currentBranch string
+
+	lines := strings.Split(string(output), "\n")
+	for _, line := range lines {
+		branch := strings.TrimSpace(line)
+		if branch == "" {
+			continue
+		}
+		if strings.HasPrefix(branch, "*") {
+			currentBranch = strings.TrimPrefix(branch, "* ")
+		}
+		branches = append(branches, strings.TrimPrefix(branch, "* "))
+	}
+
+	return branches, currentBranch, nil
 }
 
 // Delete the branches using 'git branch -D' or simulate in dry-run mode
 func deleteBranches(branches []string, dryRun bool) error {
 	for _, branch := range branches {
-		if dryRun {
-			// Print branch to be deleted in dry-run mode
-			fmt.Println(branch)
-		} else {
+		// Print branch to be deleted
+		fmt.Println(branch)
+		if !dryRun {
 			// Execute the 'git branch -D' command to delete the branch
 			cmd := exec.Command("git", "branch", "-D", branch)
 			err := cmd.Run()
