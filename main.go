@@ -23,47 +23,40 @@ func main() {
 	var dryRun bool
 	args := os.Args[1:]
 
-	// Check for --all and enforce it to be used only with --dry-run
-	if args[0] == "--all" {
-		if len(args) > 2 || (len(args) == 2 && args[1] != "--dry-run") {
-			fmt.Println("--all can only be used alone or with --dry-run.")
-			printUsage()
-			return
-		}
-		// Add the current branch to the filter list
-		branches, currentBranch, err := getLocalBranches()
-		if err != nil {
-			fmt.Printf("Error: %v\n", err)
-			os.Exit(1)
-		}
-		filterBranches = []string{currentBranch}
-		fmt.Printf("Current branch: %s\n", currentBranch)
-
-		branchesToDelete := branchcleaner.FilterBranches(branches, filterBranches)
-		fmt.Println("Branches to delete:")
-		deleteBranches(branchesToDelete, dryRun)
-	} else {
-		// Parse remaining arguments
-		for i, arg := range args {
-			switch {
-			case arg == "--standard":
-				if i > 0 {
-					fmt.Println("")
-				}
-
-				// Add standard branches to the filter list
-				filterBranches = append(filterBranches, standardBranches...)
-			case strings.HasPrefix(arg, "--exclude:"):
-				// Exclude branches passed with --exclude:<branch-pattern>
-				filterBranches = append(filterBranches, strings.TrimPrefix(arg, "--exclude:"))
-			case arg == "--dry-run":
-				dryRun = true
-			default:
-				// If an unknown argument is passed, print usage and exit
-				fmt.Printf("Unknown argument: %s\n", arg)
+	// Parse remaining arguments
+	for i, arg := range args {
+		switch {
+		case arg == "--all":
+			if len(args) > 2 || (len(args) == 2 && args[1] != "--dry-run") {
+				fmt.Println("--all can only be used alone or with --dry-run.")
 				printUsage()
 				return
 			}
+			// Add the current branch to the filter list
+			_, currentBranch, err := getLocalBranches()
+			if err != nil {
+				fmt.Printf("Error: %v\n", err)
+				os.Exit(1)
+			}
+			filterBranches = []string{currentBranch}
+			fmt.Printf("Current branch: %s\n", currentBranch)
+		case arg == "--standard":
+			if i > 0 {
+				fmt.Println("")
+			}
+
+			// Add standard branches to the filter list
+			filterBranches = append(filterBranches, standardBranches...)
+		case strings.HasPrefix(arg, "--exclude:"):
+			// Exclude branches passed with --exclude:<branch-pattern>
+			filterBranches = append(filterBranches, strings.TrimPrefix(arg, "--exclude:"))
+		case arg == "--dry-run":
+			dryRun = true
+		default:
+			// If an unknown argument is passed, print usage and exit
+			fmt.Printf("Unknown argument: %s\n", arg)
+			printUsage()
+			return
 		}
 	}
 
